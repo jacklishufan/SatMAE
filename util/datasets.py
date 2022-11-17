@@ -111,12 +111,13 @@ class CustomDatasetFromImages(SatelliteDataset):
         self.label_arr = np.asarray(self.data_info.iloc[:, 0])
         # Calculate len
         self.data_len = len(self.data_info.index)
+        self.dataset_root_path = os.path.join(os.path.dirname(csv_path),'fmow')
 
     def __getitem__(self, index):
         # Get image name from the pandas df
         single_image_name = self.image_arr[index]
         # Open image
-        img_as_img = Image.open(single_image_name)
+        img_as_img = Image.open(os.path.join(self.dataset_root_path,single_image_name))
         # Transform the image
         img_as_tensor = self.transforms(img_as_img)
         # Get label(class) of the image based on the cropped pandas column
@@ -220,8 +221,7 @@ class CustomDatasetFromImagesTemporal(SatelliteDataset):
         # Calculate len
         self.data_len = len(self.data_info)
 
-        self.dataset_root_path = os.path.dirname(csv_path)
-
+        self.dataset_root_path = os.path.join(os.path.dirname(csv_path),'fmow')
         self.timestamp_arr = np.asarray(self.data_info.iloc[:, 2])
         self.name2index = dict(zip(
             [os.path.join(self.dataset_root_path, x) for x in self.image_arr],
@@ -234,20 +234,22 @@ class CustomDatasetFromImagesTemporal(SatelliteDataset):
         std = [0.28774282336235046, 0.27541765570640564, 0.2764017581939697]
         self.normalization = transforms.Normalize(mean, std)
         self.totensor = transforms.ToTensor()
-        self.scale = transforms.Scale(224)
+        self.scale = transforms.Resize(224)
 
     def __getitem__(self, index):
         # Get image name from the pandas df
         single_image_name_1 = self.image_arr[index]
 
-        suffix = single_image_name_1[-15:]
-        prefix = single_image_name_1[:-15].rsplit('_', 1)
+        suffix = single_image_name_1[-8:]
+        prefix = single_image_name_1[:-8].rsplit('_', 1)
         regexp = '{}_*{}'.format(prefix[0], suffix)
         regexp = os.path.join(self.dataset_root_path, regexp)
         single_image_name_1 = os.path.join(self.dataset_root_path, single_image_name_1)
         temporal_files = glob(regexp)
-
-        temporal_files.remove(single_image_name_1)
+        if single_image_name_1 not in temporal_files:
+            raise ValueError(single_image_name_1)
+        else:
+            temporal_files.remove(single_image_name_1)
         if temporal_files == []:
             single_image_name_2 = single_image_name_1
             single_image_name_3 = single_image_name_1
@@ -554,7 +556,6 @@ def build_fmow_dataset(is_train: bool, args) -> SatelliteDataset:
     :return: SatelliteDataset object.
     """
     csv_path = os.path.join(args.train_path if is_train else args.test_path)
-
     if args.dataset_type == 'rgb':
         mean = CustomDatasetFromImages.mean
         std = CustomDatasetFromImages.std

@@ -101,6 +101,8 @@ def get_args_parser():
     # * Mixup params
     parser.add_argument('--mixup', type=float, default=0,
                         help='mixup alpha, mixup enabled if > 0.')
+    parser.add_argument('--name', type=str, default='',
+                        help='WANDB NAME')
     parser.add_argument('--cutmix', type=float, default=0,
                         help='cutmix alpha, cutmix enabled if > 0.')
     parser.add_argument('--cutmix_minmax', type=float, nargs='+', default=None,
@@ -149,7 +151,7 @@ def get_args_parser():
     parser.add_argument('--resume', default='',
                         help='resume from checkpoint')
     parser.add_argument('--save_every', type=int, default=1, help='How frequently (in epochs) to save ckpt')
-    parser.add_argument('--wandb', type=str, default=None,
+    parser.add_argument('--wandb', type=str, default='fmow-ft',
                         help="Wandb project name, eg: sentinel_finetune")
 
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
@@ -158,7 +160,7 @@ def get_args_parser():
                         help='Perform evaluation only')
     parser.add_argument('--dist_eval', action='store_true', default=False,
                         help='Enabling distributed evaluation (recommended during training for faster monitor')
-    parser.add_argument('--num_workers', default=10, type=int)
+    parser.add_argument('--num_workers', default=20, type=int)
     parser.add_argument('--pin_mem', action='store_true',
                         help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
     parser.add_argument('--no_pin_mem', action='store_false', dest='pin_mem')
@@ -171,6 +173,8 @@ def get_args_parser():
     parser.add_argument('--dist_on_itp', action='store_true')
     parser.add_argument('--dist_url', default='env://',
                         help='url used to set up distributed training')
+    parser.add_argument('--linear_layer_scale', default=1.0,type=float,
+                        help='linear layer lr scale multiplier')
 
     return parser
 
@@ -339,6 +343,7 @@ def main(args):
         param_groups = lrd.param_groups_lrd(model_without_ddp, args.weight_decay,
                                             no_weight_decay_list=model_without_ddp.no_weight_decay(),
                                             layer_decay=args.layer_decay)
+        param_groups[-1]["lr_scale"] *= args.linear_layer_scale
     optimizer = torch.optim.AdamW(param_groups, lr=args.lr)
     loss_scaler = NativeScaler()
 
@@ -356,7 +361,10 @@ def main(args):
 
     # Set up wandb
     if global_rank == 0 and args.wandb is not None:
-        wandb.init(project=args.wandb, entity="mae-sentinel")
+        wandb_args = dict(project=args.wandb, entity="bair-climate-initiative")
+        if args.name:
+            wandb_args.update(dict(name=args.name))
+        wandb.init(**wandb_args)
         wandb.config.update(args)
         wandb.watch(model)
 
