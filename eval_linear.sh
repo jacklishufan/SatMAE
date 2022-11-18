@@ -1,14 +1,15 @@
 python -m torch.distributed.launch --nproc_per_node=2 \
-    --nnodes=1 --master_port=16024 main_finetune.py \
+    --nnodes=1 --master_port=18115 main_finetune.py \
     --output_dir output_dir \
     --log_dir output_dir \
     --batch_size 256  \
     --model vit_large_patch16 --epochs 50 --blr 2e-4 --layer_decay 0.75 \
-    --weight_decay 0.05 --drop_path 0.65 --reprob 0.25 \
+    --weight_decay 0.05 --drop_path 0.0 --reprob 0.25 \
+    --linear_prob \
     --mixup 0.8 --cutmix 1.0 \
-    --linear_layer_scale 10 \
     --seed 0 \
-    --name fmow-scalemae-lrscale2e-4-dropout0.65 \
+    --warmup_epochs 0\
+    --name fmow-scalemae-linear_probe-no-warmup-blr-2e-4 \
     --finetune /shared/cjrd/checkpoints/scalemae-vitlarge-800.pth \
     --dist_eval --dataset rgb \
     --train_path /home/jacklishufan/multiscale-mae/fmow_data/train_62classes.csv \
