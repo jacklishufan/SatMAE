@@ -15,7 +15,7 @@ from pathlib import Path
 import torch
 import torch.backends.cudnn as cudnn
 from torch.utils.tensorboard import SummaryWriter
-
+import timm.optim.optim_factory as optim_factory
 import timm
 
 assert timm.__version__ == "0.3.2"  # version check
@@ -140,6 +140,8 @@ def get_args_parser():
 
     parser.add_argument('--nb_classes', default=62, type=int,
                         help='number of the classification types')
+    parser.add_argument('--linear_prob', action='store_true',
+                        help='if enabled, freeze the backbone laters')
 
     parser.add_argument('--output_dir', default='./output_dir',
                         help='path where to save, empty for no saving')
@@ -316,6 +318,13 @@ def main(args):
     model.to(device)
 
     model_without_ddp = model
+    if args.linear_prob:
+        # Linear probe
+        # freeze all but the head
+        for _, p in model.named_parameters():
+            p.requires_grad = False
+        for _, p in model.head.named_parameters():
+            p.requires_grad = True
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
     print("Model = %s" % str(model_without_ddp))
@@ -340,10 +349,15 @@ def main(args):
     if args.model_type is not None and args.model_type.startswith('resnet'):
         param_groups = model_without_ddp.parameters()
     else:
-        param_groups = lrd.param_groups_lrd(model_without_ddp, args.weight_decay,
-                                            no_weight_decay_list=model_without_ddp.no_weight_decay(),
-                                            layer_decay=args.layer_decay)
-        param_groups[-1]["lr_scale"] *= args.linear_layer_scale
+        if args.linear_prob:
+            param_groups = optim_factory.add_weight_decay(
+            model_without_ddp, args.weight_decay
+            )
+        else:
+            param_groups = lrd.param_groups_lrd(model_without_ddp, args.weight_decay,
+                                                no_weight_decay_list=model_without_ddp.no_weight_decay(),
+                                                layer_decay=args.layer_decay)
+            param_groups[-1]["lr_scale"] *= args.linear_layer_scale
     optimizer = torch.optim.AdamW(param_groups, lr=args.lr)
     loss_scaler = NativeScaler()
 
